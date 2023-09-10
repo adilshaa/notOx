@@ -1,3 +1,5 @@
+const { signInToJwt } = require("../Middlewares/jwt.auth");
+const Note = require("../Models/notes");
 const User = require("../Models/users");
 const bcrypt = require("bcrypt");
 const userController = {
@@ -33,6 +35,7 @@ const userController = {
 
         status: true,
       });
+
       let savedData = await userData.save();
       if (!savedData) return res.status(404).send({ message: "Not saved" });
       res.send(true);
@@ -61,7 +64,62 @@ const userController = {
         return res
           .status(404)
           .send({ message: "Your Not authenticated", key: "login" });
+
+      let signintoJwt = signInToJwt(findUser._id);
+      if (!signintoJwt)
+        return res
+          .status(404)
+          .send({ message: "Your Not authenticated", key: "signup" });
+
       res.send({ message: true });
+    } catch (error) {
+      console.log(error);
+    }
+  },
+  async addNote(req, res) {
+    try {
+      const { title, description, points, userid } = req.body;
+
+      const Notes = new Note({
+        userd: userid,
+        title: title,
+        description: description,
+        points: points,
+        date: Date.now(),
+      });
+      const addingNote = await Notes.save();
+
+      if (!addingNote) return res.status({ message: "Note not added" });
+
+      res.send(true);
+    } catch (error) {
+      console.log(error);
+    }
+  },
+  async getNotes(req, res) {
+    try {
+      const Notes = await Note.find({}).exec();
+      if (!Notes) return res.status(404).send({ message: "No Notes found" });
+
+      res.send(Notes);
+    } catch (error) {}
+  },
+  async editNote(req, res) {
+    try {
+      const { title, description, points, userid } = req.body;
+
+      const editdata = {
+        title: title,
+        description: description,
+        points: points,
+      };
+
+      const editingDate = await Note.findByIdAndUpdate(
+        { userd: userid },
+        editdata
+      ).exec();
+      if (!editingDate) return res.status(400).send(false);
+      res.send(true);
     } catch (error) {
       console.log(error);
     }
