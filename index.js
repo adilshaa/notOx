@@ -14,9 +14,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 app.use(cors({ credentials: true, origin: "http://localhost:4200" }));
 mongoose
-  .connect(
-    "mongodb+srv://adilsha:Ou18gIWTNdwWvesz@cluster0.zxfop6m.mongodb.net/notox"
-  )
+  .connect("mongodb://0.0.0.0:27017/notox")
   .then((res) => {
     console.log("connected to database");
   })

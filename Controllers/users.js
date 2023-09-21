@@ -1,4 +1,4 @@
-const { signInToJwt } = require("../Middlewares/jwt.auth");
+const { signInToJwt, extractingRequest } = require("../Middlewares/jwt.auth");
 const Note = require("../Models/notes");
 const User = require("../Models/users");
 const bcrypt = require("bcrypt");
@@ -8,7 +8,6 @@ const userController = {
       if (!req.body) {
         return res.status(404).send({ message: "Resourses not found" });
       }
-
       const { name, email, password } = req.body;
 
       if (!name && !email) {
@@ -18,7 +17,7 @@ const userController = {
       if (cheackDetiails)
         return res
           .status(404)
-          .send({ message: "This account is already reisters" });
+          .send({ message: "This account is already reisters", key: "signin" });
 
       let saltkey = await bcrypt.genSalt(10);
 
@@ -37,8 +36,25 @@ const userController = {
       });
 
       let savedData = await userData.save();
+
       if (!savedData) return res.status(404).send({ message: "Not saved" });
-      res.send(true);
+      console.log(savedData);
+      signInToJwt(savedData._id)
+        .then((respose) => {
+          console.log(respose);
+          if (respose.status == false) {
+            return res
+              .status(404)
+              .send({ message: "Your Not authenticated", key: "signup" });
+          }
+          req.user = respose.user.id;
+          res.send({ message: true, token: respose.token });
+        })
+        .catch((err) => {
+          return res
+            .status(404)
+            .send({ message: "Your Not authenticated", key: "signup" });
+        });
     } catch (error) {
       console.log(error);
     }
@@ -65,64 +81,131 @@ const userController = {
           .status(404)
           .send({ message: "Your Not authenticated", key: "login" });
 
-      let signintoJwt = signInToJwt(findUser._id);
-      if (!signintoJwt)
-        return res
-          .status(404)
-          .send({ message: "Your Not authenticated", key: "signup" });
-
-      res.send({ message: true });
+      signInToJwt(findUser._id)
+        .then((respose) => {
+          console.log(respose);
+          if (respose.status == false) {
+            return res
+              .status(404)
+              .send({ message: "Your Not authenticated", key: "signup" });
+          }
+          req.user = respose.user.id;
+          res.send({ message: true, token: respose.token });
+        })
+        .catch((err) => {
+          return res
+            .status(404)
+            .send({ message: "Your Not authenticated", key: "signup" });
+        });
     } catch (error) {
       console.log(error);
     }
   },
+  async authentication(req, res) {
+    try {
+      extractingRequest(req, res).then(
+        (resposnse) => {
+          if (resposnse.status) {
+            res.send(true);
+          } else {
+            return res
+              .status(404)
+              .send({ message: "Your Not authenticated", key: "signup" });
+          }
+        },
+        (err) => {
+          return res
+            .status(404)
+            .send({ message: "Your Not authenticated", key: "signup" });
+        }
+      );
+    } catch (error) {}
+  },
   async addNote(req, res) {
     try {
       const { title, description, points, userid } = req.body;
+      const userId = req.user;
 
       const Notes = new Note({
-        userd: userid,
-        title: title,
-        description: description,
-        points: points,
+        userd: "",
+        title: "",
+        description: "",
+        points: "",
+        userId: userId,
         date: Date.now(),
       });
       const addingNote = await Notes.save();
 
       if (!addingNote) return res.status({ message: "Note not added" });
-
-      res.send(true);
+      console.log(addingNote);
+      res.send({ note: addingNote });
     } catch (error) {
       console.log(error);
     }
   },
   async getNotes(req, res) {
     try {
-      const Notes = await Note.find({}).exec();
+      let userId = req.user;
+      const Notes = await Note.find({ userId: userId })
+        .sort({ date: -1 })
+        .exec();
       if (!Notes) return res.status(404).send({ message: "No Notes found" });
 
       res.send(Notes);
     } catch (error) {}
   },
-  async editNote(req, res) {
+
+  async updateDesc(req, res) {
     try {
-      const { title, description, points, userid } = req.body;
+      let { text } = req.body;
+      let { id } = req.params;
+      const userId = req.user;
 
-      const editdata = {
-        title: title,
-        description: description,
-        points: points,
-      };
-
-      const editingDate = await Note.findByIdAndUpdate(
-        { userd: userid },
-        editdata
+      let updating = await Note.updateOne(
+        { _id: id, userId: userId },
+        { $set: { description: text, date: Date.now() } }
       ).exec();
-      if (!editingDate) return res.status(400).send(false);
-      res.send(true);
+      if (updating.modifiedCount == 1) {
+        const updatedDocument = await Note.findOne({
+          _id: id,
+          userId: userId,
+        }).exec();
+        res.send({ status: true, resNote: updatedDocument });
+      }
     } catch (error) {
       console.log(error);
     }
+  },
+
+  async updateTitle(req, res) {
+    try {
+      let { text } = req.body;
+      let { id } = req.params;
+      const userId = req.user;
+      let updating = await Note.updateOne(
+        { _id: id, userId: userId },
+        { $set: { title: text, date: Date.now() } }
+      ).exec();
+      if (updating.modifiedCount == 1) {
+        const updatedDocument = await Note.findOne({
+          _id: id,
+          userId: userId,
+        }).exec();
+        res.send({ status: true, resNote: updatedDocument });
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  },
+  async deleteNote(req, res) {
+    try {
+      if (req.params) {
+        const { id } = req.params;
+        const deletingNote = await Note.findByIdAndRemove(id);
+        if (deletingNote)
+          return res.send({ status: true, id: deletingNote._id });
+      }
+    } catch (error) {}
   },
 };
 
